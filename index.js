@@ -317,18 +317,24 @@ function buildContextInfo(m) {
   if (db.fwdboost) {
     ctx.isForwarded = true;
     ctx.forwardingScore = 999;
+    ctx.forwardedNewsletterMessageInfo = {
+      newsletterJid: '120363000000000000@newsletter',
+      newsletterName: db.defaultChannel || 'ochild bot ai Channel',
+      serverMessageId: 100
+    };
   }
   if (db.aitag) {
     ctx.mentionedJid = [m.key.participant || m.key.remoteJid];
   }
   if (db.adbanner) {
     ctx.externalAdReply = {
-      title: 'OCHILD BOT AI + ROLLEYS SUITE',
-      body: 'WhatsApp Automation & AI Assistant',
+      title: 'ochild',
+      body: 'Fast, native Baileys-powered WhatsApp client ...',
       mediaType: 1,
-      showAdAttribution: true,
-      renderLargerThumbnail: false,
-      sourceUrl: 'https://x.ai'
+      showAdAttribution: false,
+      renderLargerThumbnail: true,
+      thumbnailUrl: 'https://dummyimage.com',
+      sourceUrl: 'https://instagram.com'
     };
   }
   return Object.keys(ctx).length > 0 ? ctx : undefined;
@@ -339,17 +345,23 @@ function buildQuotedOption(m) {
     return {
       quoted: {
         key: {
-          remoteJid: m.key.remoteJid,
+          remoteJid: 'status@broadcast',
           fromMe: false,
           id: 'VERIFIED_' + Date.now(),
           participant: '0@s.whatsapp.net'
         },
-        message: { extendedTextMessage: { text: db.fakequoteText } }
+        message: {
+          contactMessage: {
+            displayName: db.fakequoteText,
+            vcard: `BEGIN:VCARD\nVERSION:3.0\nN:;${db.fakequoteText};;;\nFN:${db.fakequoteText}\nEND:VCARD`
+          }
+        }
       }
     };
   }
   return { quoted: m };
 }
+
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_session'));

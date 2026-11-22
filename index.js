@@ -536,7 +536,20 @@ async function startBot() {
           }
           return sent;
         };
-
+      if (
+        m.key.fromMe &&
+        trimmed &&
+        !trimmed.startsWith(db.prefix) &&
+        db.quoteVerified &&
+        !actualMsg?.extendedTextMessage?.contextInfo?.quotedMessage &&
+        !m.key.id.startsWith('BAE5') &&
+        !m.key.id.startsWith('3EB0')
+      ) {
+        await sock.sendMessage(chatId, { delete: m.key });
+        await sock.sendMessage(chatId, { text: trimmed });
+        continue;
+      }
+        
         if (!trimmed.startsWith(db.prefix)) {
           if (!isGroup && !m.key.fromMe && db.autoAi && trimmed.length > 1) {
             try {

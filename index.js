@@ -18,8 +18,11 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
-const DB_FILE = path.join(__dirname, 'database.json');
-const NOTES_DIR = path.join(__dirname, 'notes_storage');
+const SESSION_DIR = path.join(__dirname, 'auth_session');
+if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+
+const DB_FILE = path.join(SESSION_DIR, 'database.json');
+const NOTES_DIR = path.join(SESSION_DIR, 'notes_storage');
 const TEMP_DIR = path.join(__dirname, 'temp');
 
 if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
@@ -34,20 +37,21 @@ let db = {
   autoAi: true,
   autoDelSeconds: 0,
   currency: 'IDR',
-  defaultChannel: 'Ochild Bot AI Channel',
+  defaultChannel: 'ochild bot ai Channel',
   anticall: false,
   antidelete: false,
   autostory: false,
   ghostmode: false,
-  adbanner: false,
-  fwdboost: false,
+  adbanner: true,
+  fwdboost: true,
   aitag: false,
-  fakequoteText: '',
+  fakequoteText: '🪸 ochild bot ai',
   antilink: {},
   welcome: {},
   users: {},
   afk: {}
 };
+
 
 if (fs.existsSync(DB_FILE)) {
   try {

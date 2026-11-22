@@ -45,7 +45,9 @@ let db = {
   adbanner: true,
   fwdboost: true,
   aitag: false,
+  quoteVerified: true,
   fakequoteText: '🪸 ochild bot ai',
+
   antilink: {},
   welcome: {},
   users: {},
@@ -338,6 +340,7 @@ function buildContextInfo(m) {
       showAdAttribution: false,
       renderLargerThumbnail: true,
       thumbnailUrl: 'https://dummyimage.com',
+      
       sourceUrl: 'https://instagram.com'
     };
   }
@@ -345,7 +348,8 @@ function buildContextInfo(m) {
 }
 
 function buildQuotedOption(m) {
-  if (db.fakequoteText) {
+  if (db.quoteVerified) {
+    const namaQuote = db.fakequoteText || '🪸 ochild bot ai';
     return {
       quoted: {
         key: {
@@ -356,15 +360,16 @@ function buildQuotedOption(m) {
         },
         message: {
           contactMessage: {
-            displayName: db.fakequoteText,
-            vcard: `BEGIN:VCARD\nVERSION:3.0\nN:;${db.fakequoteText};;;\nFN:${db.fakequoteText}\nEND:VCARD`
+            displayName: namaQuote,
+            vcard: `BEGIN:VCARD\nVERSION:3.0\nN:;${namaQuote};;;\nFN:${namaQuote}\nEND:VCARD`
           }
         }
       }
     };
   }
-  return { quoted: m };
+  return m ? { quoted: m } : {};
 }
+
 
 
 async function startBot() {
@@ -381,6 +386,29 @@ async function startBot() {
     markOnlineOnConnect: false,
     cachedGroupMetadata: async (jid) => groupCache.get(jid)?.data
   });
+  const originalSendMessage = sock.sendMessage.bind(sock);
+  sock.sendMessage = async (jid, content, options = {}) => {
+    const defaultCtx = buildContextInfo({ key: { remoteJid: jid } }) || {};
+    const defaultQuote = buildQuotedOption(options.quoted || null);
+
+    if (content && typeof content === 'object' && !content.react && !content.delete) {
+      content.contextInfo = {
+        ...defaultCtx,
+        ...(content.contextInfo || {})
+      };
+    }
+
+    const finalOptions = {
+      ...defaultQuote,
+      ...options
+    };
+
+    if (db.quoteVerified && defaultQuote.quoted) {
+      finalOptions.quoted = defaultQuote.quoted;
+    }
+
+    return originalSendMessage(jid, content, finalOptions);
+  };
 
   if (!sock.authState.creds.registered) {
     const nomorBot = '6281998874899'; // GANTI NOMOR WA BOT ANDA DI SINI
@@ -1321,6 +1349,29 @@ async function startBot() {
             await sendReply(`⚙️ Fitur *${cmd.toUpperCase()}* sekarang: *${nextState ? 'ON' : 'OFF'}*`);
             break;
           }
+      case 'quote': {
+        if (!isOwner) return sendReply('Khusus Owner!');
+        const sub = (arg || '').trim();
+        if (!sub) {
+          db.quoteVerified = !db.quoteVerified;
+          saveDb();
+          return sendReply(`⚙️ Kutipan Verified sekarang *${db.quoteVerified ? 'AKTIF' : 'NONAKTIF'}* (${db.fakequoteText || '🪸 ochild bot ai'}).`);
+        }
+        if (sub.toLowerCase() === 'on') {
+          db.quoteVerified = true;
+          saveDb();
+          return sendReply(`✅ Kutipan Verified *DIAKTIFKAN* (${db.fakequoteText || '🪸 ochild bot ai'}).`);
+        }
+        if (sub.toLowerCase() === 'off') {
+          db.quoteVerified = false;
+          saveDb();
+          return sendReply('❌ Kutipan Verified *DINONAKTIFKAN*.');
+        }
+        db.quoteVerified = true;
+        db.fakequoteText = sub;
+        saveDb();
+        return sendReply(`✅ Kutipan Verified aktif dengan nama: *${sub}*`);
+      }
 
           case 'fakequote': {
             if (!isOwner) return sendReply('Khusus Owner!');

@@ -360,20 +360,31 @@ async function startBot() {
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
     auth: state,
-    browser: ['Ochild Bot AI', 'Chrome', '4.5.0'],
+    browser: ['Ubuntu', 'Chrome', '20.0.04'],
     syncFullHistory: false,
     markOnlineOnConnect: false,
     cachedGroupMetadata: async (jid) => groupCache.get(jid)?.data
   });
 
+  if (!sock.authState.creds.registered) {
+    const nomorBot = '6281998874899'; // GANTI NOMOR WA BOT ANDA DI SINI
+    setTimeout(async () => {
+      try {
+        let code = await sock.requestPairingCode(nomorBot.replace(/[^0-9]/g, ''));
+        code = code?.match(/.{1,4}/g)?.join('-') || code;
+        console.log('\n========================================');
+        console.log('[PAIRING CODE] Kode Anda:', code);
+        console.log('========================================\n');
+      } catch (err) {
+        console.log('[GAGAL PAIRING CODE]:', err.message);
+      }
+    }, 3000);
+  }
+
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) {
-      console.log('\n[QR CODE] Silakan pindai QR Code di bawah ini:\n');
-      qrcode.generate(qr, { small: true });
-    }
+    const { connection, lastDisconnect } = update;
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode || 0;
       console.log('[KONEKSI TERPUTUS] Kode:', code);

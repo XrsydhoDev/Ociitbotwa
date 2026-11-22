@@ -1,0 +1,15 @@
+{
+  "name": "ochild-bot-ai",
+  "version": "2.2.0",
+  "description": "Ochild Bot AI WhatsApp Bot for Termux",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "npm:@itsliaaa/baileys@latest",
+    "axios": "^1.7.9",
+    "pino": "^9.6.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

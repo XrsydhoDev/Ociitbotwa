@@ -47,7 +47,8 @@ let db = {
   aitag: false,
   quoteVerified: true,
   fakequoteText: '🪸 ochild bot ai',
-  globalPresence: '',
+    globalPresence: '',
+  presenceChats: [],
   
   antilink: {},
   welcome: {},
@@ -371,20 +372,22 @@ function buildQuotedOption(m) {
   return m ? { quoted: m } : {};
 }
 
-const activePresence = new Map();
 let presenceInterval = null;
 
 function startPresenceLoop(sock) {
   if (presenceInterval) clearInterval(presenceInterval);
   presenceInterval = setInterval(async () => {
-    for (const [jid, type] of activePresence.entries()) {
+    if (!db.globalPresence) return;
+    const targets = Array.isArray(db.presenceChats) ? db.presenceChats : [];
+    for (const jid of targets) {
       try {
         await sock.presenceSubscribe(jid);
-        await sock.sendPresenceUpdate(type, jid);
+        await sock.sendPresenceUpdate(db.globalPresence, jid);
       } catch (e) {}
     }
   }, 3000);
 }
+
 
 
 async function startBot() {
@@ -484,12 +487,19 @@ async function startBot() {
       try {
         if (!m.message || !m.key?.id) continue;
         if (!chatId) continue;
-      if (db.globalPresence && chatId !== 'status@broadcast') {
-        activePresence.set(chatId, db.globalPresence);
-        sock.presenceSubscribe(chatId)
-          .then(() => sock.sendPresenceUpdate(db.globalPresence, chatId))
-          .catch(() => {});
+            if (chatId !== 'status@broadcast') {
+        if (!Array.isArray(db.presenceChats)) db.presenceChats = [];
+        if (!db.presenceChats.includes(chatId)) {
+          db.presenceChats.push(chatId);
+          saveDb();
+        }
+        if (db.globalPresence) {
+          sock.presenceSubscribe(chatId)
+            .then(() => sock.sendPresenceUpdate(db.globalPresence, chatId))
+            .catch(() => {});
+        }
       }
+
         
         deletedMessagesCache[m.key.id] = m;
 
@@ -1211,25 +1221,25 @@ async function startBot() {
             break;
           }
 
-                case 'faketyping': {
+                      case 'faketyping': {
         if (!isOwner) return sendReply('Khusus Owner!');
         const sub = (arg || '').trim().toLowerCase();
         if (sub === 'off') {
           db.globalPresence = '';
           saveDb();
-          for (const jid of activePresence.keys()) {
+          for (const jid of (db.presenceChats || [])) {
             await sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
-          activePresence.clear();
-          await sendReply('⌨️ Global Fake Typing dinonaktifkan di semua chat.');
+          await sendReply('⌨️ Fake Typing Global dinonaktifkan.');
           break;
         }
         db.globalPresence = 'composing';
+        if (!Array.isArray(db.presenceChats)) db.presenceChats = [];
+        if (!db.presenceChats.includes(chatId)) db.presenceChats.push(chatId);
         saveDb();
-        activePresence.set(chatId, 'composing');
+        await sendReply('⌨️ Fake Typing Global AKTIF (berjalan terus setiap 3 detik).');
         await sock.presenceSubscribe(chatId).catch(() => {});
         await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
-        await sendReply('⌨️ Global Fake Typing AKTIF di semua chat (berjalan terus setiap 3 detik).');
         break;
       }
 
@@ -1239,19 +1249,19 @@ async function startBot() {
         if (sub === 'off') {
           db.globalPresence = '';
           saveDb();
-          for (const jid of activePresence.keys()) {
+          for (const jid of (db.presenceChats || [])) {
             await sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
-          activePresence.clear();
-          await sendReply('🎙️ Global Fake Recording dinonaktifkan di semua chat.');
+          await sendReply('🎙️ Fake Recording Global dinonaktifkan.');
           break;
         }
         db.globalPresence = 'recording';
+        if (!Array.isArray(db.presenceChats)) db.presenceChats = [];
+        if (!db.presenceChats.includes(chatId)) db.presenceChats.push(chatId);
         saveDb();
-        activePresence.set(chatId, 'recording');
+        await sendReply('🎙️ Fake Recording Global AKTIF (berjalan terus setiap 3 detik).');
         await sock.presenceSubscribe(chatId).catch(() => {});
         await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
-        await sendReply('🎙️ Global Fake Recording AKTIF di semua chat (berjalan terus setiap 3 detik).');
         break;
       }
 

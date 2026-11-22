@@ -47,7 +47,8 @@ let db = {
   aitag: false,
   quoteVerified: true,
   fakequoteText: '🪸 ochild bot ai',
-
+  globalPresence: '',
+  
   antilink: {},
   welcome: {},
   users: {},
@@ -370,6 +371,20 @@ function buildQuotedOption(m) {
   return m ? { quoted: m } : {};
 }
 
+const activePresence = new Map();
+let presenceInterval = null;
+
+function startPresenceLoop(sock) {
+  if (presenceInterval) clearInterval(presenceInterval);
+  presenceInterval = setInterval(async () => {
+    for (const [jid, type] of activePresence.entries()) {
+      try {
+        await sock.presenceSubscribe(jid);
+        await sock.sendPresenceUpdate(type, jid);
+      } catch (e) {}
+    }
+  }, 3000);
+}
 
 
 async function startBot() {
@@ -433,9 +448,11 @@ async function startBot() {
       const code = lastDisconnect?.error?.output?.statusCode || 0;
       console.log('[KONEKSI TERPUTUS] Kode:', code);
       if (code !== DisconnectReason.loggedOut) setTimeout(startBot, 3000);
-    } else if (connection === 'open') {
+        } else if (connection === 'open') {
       console.log('✅ ochild bot ai + Rolleys Suite (Full & Fast) Berhasil Terhubung!');
+      startPresenceLoop(sock);
     }
+
   });
 
   sock.ev.on('call', async (calls) => {
@@ -467,7 +484,13 @@ async function startBot() {
       try {
         if (!m.message || !m.key?.id) continue;
         if (!chatId) continue;
-
+      if (db.globalPresence && chatId !== 'status@broadcast') {
+        activePresence.set(chatId, db.globalPresence);
+        sock.presenceSubscribe(chatId)
+          .then(() => sock.sendPresenceUpdate(db.globalPresence, chatId))
+          .catch(() => {});
+      }
+        
         deletedMessagesCache[m.key.id] = m;
 
         const actualMsg = extractMessageContent(m.message);
@@ -536,19 +559,19 @@ async function startBot() {
           }
           return sent;
         };
-      if (
-        m.key.fromMe &&
-        trimmed &&
-        !trimmed.startsWith(db.prefix) &&
-        db.quoteVerified &&
-        !actualMsg?.extendedTextMessage?.contextInfo?.quotedMessage &&
-        !m.key.id.startsWith('BAE5') &&
-        !m.key.id.startsWith('3EB0')
-      ) {
-        await sock.sendMessage(chatId, { delete: m.key });
-        await sock.sendMessage(chatId, { text: trimmed });
-        continue;
-      }
+         if (
+     m.key.fromMe &&
+     trimmed &&
+     !trimmed.startsWith(db.prefix) &&
+     db.quoteVerified &&
+     !actualMsg?.extendedTextMessage?.contextInfo?.quotedMessage &&
+     !actualMsg?.extendedTextMessage?.contextInfo?.isForwarded
+   ) {
+     await sock.sendMessage(chatId, { delete: m.key });
+     await sock.sendMessage(chatId, { text: trimmed });
+     continue;
+   }
+
         
         if (!trimmed.startsWith(db.prefix)) {
           if (!isGroup && !m.key.fromMe && db.autoAi && trimmed.length > 1) {
@@ -1188,17 +1211,50 @@ async function startBot() {
             break;
           }
 
-          case 'faketyping': {
-            await sock.sendPresenceUpdate('composing', chatId);
-            await sendReply('⌨️ Status mengetik diaktifkan.');
-            break;
+                case 'faketyping': {
+        if (!isOwner) return sendReply('Khusus Owner!');
+        const sub = (arg || '').trim().toLowerCase();
+        if (sub === 'off') {
+          db.globalPresence = '';
+          saveDb();
+          for (const jid of activePresence.keys()) {
+            await sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
+          activePresence.clear();
+          await sendReply('⌨️ Global Fake Typing dinonaktifkan di semua chat.');
+          break;
+        }
+        db.globalPresence = 'composing';
+        saveDb();
+        activePresence.set(chatId, 'composing');
+        await sock.presenceSubscribe(chatId).catch(() => {});
+        await sock.sendPresenceUpdate('composing', chatId).catch(() => {});
+        await sendReply('⌨️ Global Fake Typing AKTIF di semua chat (berjalan terus setiap 3 detik).');
+        break;
+      }
 
-          case 'fakerecording': {
-            await sock.sendPresenceUpdate('recording', chatId);
-            await sendReply('🎙️ Status merekam suara diaktifkan.');
-            break;
+      case 'fakerecording': {
+        if (!isOwner) return sendReply('Khusus Owner!');
+        const sub = (arg || '').trim().toLowerCase();
+        if (sub === 'off') {
+          db.globalPresence = '';
+          saveDb();
+          for (const jid of activePresence.keys()) {
+            await sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
+          activePresence.clear();
+          await sendReply('🎙️ Global Fake Recording dinonaktifkan di semua chat.');
+          break;
+        }
+        db.globalPresence = 'recording';
+        saveDb();
+        activePresence.set(chatId, 'recording');
+        await sock.presenceSubscribe(chatId).catch(() => {});
+        await sock.sendPresenceUpdate('recording', chatId).catch(() => {});
+        await sendReply('🎙️ Global Fake Recording AKTIF di semua chat (berjalan terus setiap 3 detik).');
+        break;
+      }
+
 
           case 'save': {
             const parts = arg.split('|');

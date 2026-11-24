@@ -18,7 +18,39 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+// Resolve FFmpeg from Railway/Nixpacks PATH, an explicit environment path,
+// or the optional ffmpeg-static npm package.
+function resolveFfmpegPath() {
+  const candidates = [process.env.FFMPEG_PATH];
+  try { candidates.push(require('ffmpeg-static')); } catch (_) {}
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'string' && fs.existsSync(candidate)) return candidate;
+  }
+  return 'ffmpeg'; // resolved through PATH by the shell
+}
+const FFMPEG_BIN = resolveFfmpegPath();
+
 function shellQuote(value) { return "'" + String(value).replace(/'/g, "'\\''") + "'"; }
+
+async function runFfmpeg(args, options = {}) {
+  const command = `${shellQuote(FFMPEG_BIN)} ${args.map(shellQuote).join(' ')}`;
+  try {
+    return await execAsync(command, { maxBuffer: 16 * 1024 * 1024, ...options });
+  } catch (error) {
+    const detail = String(error.stderr || error.message || '').trim();
+    if (/ffmpeg: not found|not recognized as an internal|enoent/i.test(detail)) {
+      throw new Error('FFmpeg tidak ditemukan. Pastikan Railway memakai Nixpacks, file nixpacks.toml berada di root repository, lalu lakukan Redeploy. Alternatif: tambahkan dependency ffmpeg-static dan set FFMPEG_PATH jika diperlukan.');
+    }
+    throw new Error(`FFmpeg gagal: ${detail.slice(0, 900) || error.message}`);
+  }
+}
+
+function checkFfmpegOnStartup() {
+  exec(`${shellQuote(FFMPEG_BIN)} -version`, (error, stdout) => {
+    if (error) console.error('[FFMPEG] Tidak tersedia:', 'Pastikan nixpacks.toml aktif dan Railway sudah Redeploy.');
+    else console.log('[FFMPEG] Siap:', String(stdout).split('\n')[0]);
+  });
+}
 
 const SESSION_DIR = path.join(__dirname, 'auth_session');
 if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
@@ -225,9 +257,9 @@ async function createWebpSticker(inputBuffer, isVideo, packname, author) {
 
   try {
     if (isVideo) {
-      await execAsync(`ffmpeg -y -i ${shellQuote(inputPath)} -vcodec libwebp -filter:v "fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -loop 0 -t 7 -preset default -an -fps_mode vfr ${shellQuote(outputPath)}`);
+      await runFfmpeg(['-y', '-i', inputPath, '-vcodec', 'libwebp', '-filter:v', 'fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000', '-loop', '0', '-t', '7', '-preset', 'default', '-an', '-fps_mode', 'vfr', outputPath]);
     } else {
-      await execAsync(`ffmpeg -y -i ${shellQuote(inputPath)} -vcodec libwebp -filter:v "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -lossless 1 -preset default -an -fps_mode vfr ${shellQuote(outputPath)}`);
+      await runFfmpeg(['-y', '-i', inputPath, '-vcodec', 'libwebp', '-filter:v', 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000', '-lossless', '1', '-preset', 'default', '-an', '-fps_mode', 'vfr', outputPath]);
     }
     const webpBuffer = fs.readFileSync(outputPath);
     return addExifToWebp(webpBuffer, packname || 'Ochild Bot AI', author || 'Rolleys Suite');
@@ -286,7 +318,7 @@ async function webpToPng(webpBuffer) {
   const outPath = path.join(TEMP_DIR, `im_${id}.png`);
   fs.writeFileSync(inPath, webpBuffer);
   try {
-    await execAsync(`ffmpeg -y -i ${shellQuote(inPath)} ${shellQuote(outPath)}`);
+    await runFfmpeg(['-y', '-i', inPath, outPath]);
     return fs.readFileSync(outPath);
   } finally {
     if (fs.existsSync(inPath)) fs.unlinkSync(inPath);
@@ -1375,7 +1407,7 @@ async function startBot() {
             const textPath = path.join(TEMP_DIR, `brat_${id}.txt`);
             fs.writeFileSync(textPath, formattedText, 'utf8');
             try {
-              await execAsync(`ffmpeg -y -f lavfi -i color=c=white:s=512x512:d=1 -vf "drawtext=textfile=${shellQuote(textPath)}:fontcolor=black:fontsize=46:x=(w-text_w)/2:y=(h-text_h)/2" -vcodec libwebp -lossless 1 ${shellQuote(outWebp)}`);
+              await runFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=white:s=512x512:d=1', '-vf', `drawtext=textfile=${textPath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")}:fontcolor=black:fontsize=46:x=(w-text_w)/2:y=(h-text_h)/2`, '-vcodec', 'libwebp', '-lossless', '1', outWebp]);
               const webpWithExif = addExifToWebp(fs.readFileSync(outWebp), 'Brat Sticker', db.ownerName);
               await sock.sendMessage(chatId, { sticker: webpWithExif }, { quoted: m });
             } finally {
@@ -1931,4 +1963,5 @@ async function startBot() {
   });
 }
 
+checkFfmpegOnStartup();
 startBot();

@@ -1012,6 +1012,95 @@ async function startBot() {
           if (await runRolleysPlugins(pluginVars)) continue;
         }
 
+        const selectedMenuRow = actualMsg.listResponseMessage?.singleSelectReply?.selectedRowId || '';
+        if (selectedMenuRow.startsWith('ocmenu_')) {
+          const categoryText = {
+            ocmenu_ai: [
+              '🧠 *KECERDASAN BUATAN (GROQ & GROK)*',
+              '• .autoai on/off — AI otomatis di chat pribadi',
+              '• .setgroq <api_key> — atur API Groq',
+              '• .setgrok <api_key> — atur API Grok',
+              '• .ai / .grok / .gpt — tanya AI',
+              '• .code <teks> — bantuan coding',
+              '• .translate <teks> — terjemahan',
+              '• .summary <teks> — ringkasan',
+              '• .roast <teks> — roast',
+              '• .reset — reset percakapan AI'
+            ].join('\n'),
+            ocmenu_download: [
+              '📥 *DOWNLOADER & FILE*',
+              '• .dl <url> — unduh URL yang didukung',
+              '• .pvmu — preview ZIP',
+              '',
+              'Catatan: format dan sumber unduhan yang didukung mengikuti implementasi downloader pada bot.'
+            ].join('\n'),
+            ocmenu_media: [
+              '🎨 *MEDIA, STIKER & SALURAN*',
+              '• .sticker / .s — buat stiker',
+              '• .sprem — stiker dengan metadata pack',
+              '• .toimg — stiker ke gambar',
+              '• .swm <pack>|<author> / .take — metadata stiker',
+              '• .sai <prompt> — stiker AI',
+              '• .rvo / .vv / .1x — media sekali lihat',
+              '• .brat <teks> — gambar Brat',
+              '• .setch <channel_jid> — atur tujuan Channel',
+              '• .imgch / .stickch — kirim media ke Channel'
+            ].join('\n'),
+            ocmenu_group: [
+              '👥 *MANAJEMEN GRUP & STATUS*',
+              '• .tagall / .hidetag / .fwd',
+              '• .kick / .promote / .demote',
+              '• .mute / .unmute',
+              '• .setname / .setdesc',
+              '• .groupstatus / .gstatus <teks>',
+              '• .archive / .unarchive / .afk / .getjid',
+              '• .antilink on/off / .welcome on/off',
+              '• .faketyping / .fakerecording'
+            ].join('\n'),
+            ocmenu_fun: [
+              '🎮 *GAMES & FUN*',
+              '• .roast <teks> — hiburan berbasis AI',
+              '• .dog — gambar anjing',
+              '• .zen — konten Zen',
+              '',
+              'Game tambahan seperti Catur atau TicTacToe tidak ditampilkan karena belum tercantum sebagai perintah aktif di menu script.'
+            ].join('\n'),
+            ocmenu_tools: [
+              '🛠️ *CATATAN & UTILITAS*',
+              '• .save <nama>|<isi> / .load <nama>',
+              '• .files / .delnote <nama>',
+              '• .qr <teks> / .tts <teks> / .weather <kota>',
+              '• .img <prompt> / .dog / .zen',
+              '• .poll judul|opsi1|opsi2',
+              '• .quiz pertanyaan|opsi1|opsi2',
+              '• .event judul|deskripsi|lokasi',
+              '• .table judul|col1,col2|val1,val2',
+              '• .button / .listmenu / .carousel / .html / .comment',
+              '• .setcurrency / .kurs'
+            ].join('\n'),
+            ocmenu_control: [
+              '⚙️ *KONTROL BOT & PENGATURAN*',
+              '• .self / .public / .ghostmode',
+              '• .anticall / .antidelete / .autostory',
+              '• .autodel <detik>|<pesan>',
+              '• .setautodel <detik> (0 = off)',
+              '• .aitag on/off',
+              '• .fakepay / .stickerpay / .paymsg',
+              '• .infobot / .owner / .ping / .echo',
+              '',
+              'Fitur .adbanner dan .fwdboost tidak menjanjikan pemalsuan metadata pesan.'
+            ].join('\n')
+          }[selectedMenuRow];
+
+          if (categoryText) {
+            await sock.sendMessage(chatId, {
+              text: categoryText,
+              footer: `Ketik ${db.prefix}menu untuk membuka kategori lagi.`
+            }, { quoted: m });
+          }
+          continue;
+        }
+
         if (!trimmed.startsWith(db.prefix)) {
           if (!isGroup && !m.key.fromMe && db.autoAi && trimmed.length > 1) {
             try {
@@ -1115,94 +1204,40 @@ async function startBot() {
           case 'help': {
             const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
             const nextXp = userStats.level * 100;
-            const menuText = [
-              'ochild bot ai',
-              '╭─── ✦ 𝐎𝐂𝐇𝐈𝐋𝐃 𝐁𝐎𝐓 𝐀𝐈 + 𝐑𝐎𝐋𝐋𝐄𝐘𝐒 ✦ ───',
-              `│ Halo, ${db.ownerName}`,
-              '│',
-              `├ ◆ ROLE     : ${isOwner ? 'OWNER' : 'MEMBER'}`,
-              `├ ◆ LEVEL    : ${userStats.level} (${userStats.xp}/${nextXp} XP)`,
-              '├ ◆ LIMIT    : ∞',
-              `├ ◆ AUTO AI  : ${db.autoAi ? 'ON (Chat Pribadi)' : 'OFF'}`,
-              `├ ◆ AUTO DEL : ${db.autoDelSeconds > 0 ? db.autoDelSeconds + 's' : 'OFF'}`,
-              '│',
-              `├ ◆ RUNTIME  : ${formatRuntime(process.uptime())}`,
-              `├ ◆ MODE     : ${db.mode.toUpperCase()}`,
-              '│',
-              `╰── ${getProgressBar(userStats.xp, nextXp)}`,
+            const menuHeader = [
+              '✦ OCHILD BOT AI + ROLLEYS ✦',
+              `Halo, ${db.ownerName}`,
               '',
-              '┌── ✦ Informasi',
-              '│ ▸ .infobot / .menu / .owner / .ping / .echo',
-              '└─────────────',
+              `◆ ROLE: ${isOwner ? 'OWNER' : 'MEMBER'}`,
+              `◆ LEVEL: ${userStats.level} (${userStats.xp}/${nextXp} XP)`,
+              '◆ LIMIT: ∞',
+              `◆ AUTO AI: ${db.autoAi ? 'ON' : 'OFF'}`,
+              `◆ AUTO DEL: ${db.autoDelSeconds > 0 ? db.autoDelSeconds + ' detik' : 'OFF'}`,
+              `◆ RUNTIME: ${formatRuntime(process.uptime())}`,
+              `◆ MODE: ${db.mode.toUpperCase()}`,
+              `◆ RAM: ${memMb} MB`,
               '',
-              '┌── ✦ Kecerdasan Buatan (Groq & Grok xAI)',
-              '│ ▸ .autoai on/off (chat pribadi)',
-              '│ ▸ .setgroq <api_key> / .setgrok <api_key>',
-              '│ ▸ .ai / .grok / .gpt / .code / .translate',
-              '│ ▸ .summary / .roast / .reset',
-              '└─────────────',
-              '',
-              '┌── ✦ Auto-Delete & Payment',
-              '│ ▸ .autodel <detik> | <pesan>',
-              '│ ▸ .setautodel <detik> (0 = off)',
-              '│ ▸ .fakepay <nominal> | <catatan>',
-              '│ ▸ .stickerpay <nominal> (balas gambar)',
-              '│ ▸ .paymsg <nominal> | <catatan>',
-              '│ ▸ .setcurrency / .kurs',
-              '└─────────────',
-              '',
-              '┌── ✦ Media, Stiker & Saluran (Rolleys)',
-              '│ ▸ .sticker / .s / .sprem (stiker biasa) / .toimg',
-              '│ ▸ .swm <pack>|<author> / .take',
-              '│ ▸ .sai <prompt> (stiker AI)',
-              '│ ▸ .rvo / .vv / .1x (buka sekali lihat)',
-              '│ ▸ .dl <url> / .pvmu (preview ZIP)',
-              '│ ▸ .setch <channel_jid> / .imgch / .stickch (WhatsApp Channel)',
-              '│ ▸ .brat <teks>',
-              '└─────────────',
-              '',
-              '┌── ✦ Rich Builders & Interaktif (Rolleys)',
-              '│ ▸ .poll judul|opsi1|opsi2',
-              '│ ▸ .quiz pertanyaan|opsi1|opsi2 (poll, tanpa skor otomatis)',
-              '│ ▸ .event judul|deskripsi|lokasi',
-              '│ ▸ .table judul|col1,col2|val1,val2',
-              '│ ▸ .button judul|opsi1|opsi2 (Poll interaktif)',
-              '│ ▸ .listmenu judul|opsi1|opsi2 (Poll pilihan)',
-              '│ ▸ .carousel (kartu teks) / .html (HTML→teks) / .comment',
-              '└─────────────',
-              '',
-              '┌── ✦ Manajemen Grup & Status (Rolleys)',
-              '│ ▸ .tagall / .hidetag / .fwd',
-              '│ ▸ .kick / .promote / .demote',
-              '│ ▸ .mute / .unmute / .setname / .setdesc',
-              '│ ▸ .groupstatus / .gstatus <teks>',
-              '│ ▸ .archive / .unarchive / .afk / .getjid',
-              '│ ▸ .antilink on/off / .welcome on/off',
-              '│ ▸ .faketyping / .fakerecording',
-              '└─────────────',
-              '',
-              '┌── ✦ Catatan & Utilitas (Rolleys)',
-              '│ ▸ .save <nama>|<isi> / .load <nama>',
-              '│ ▸ .files / .delnote <nama>',
-              '│ ▸ .qr <teks> / .tts <teks> / .weather <kota>',
-              '│ ▸ .img <prompt> / .dog / .zen',
-              '│ ▸ .musik <lagu> / .play <lagu> / .lyrics <lagu>',
-              '└─────────────',
-              '',
-              '┌── ✦ Kontrol Bot & Lencana Pesan',
-              '│ ▸ .self / .public / .ghostmode',
-              '│ ▸ .anticall / .antidelete / .autostory',
-              '│ ▸ .aitag on/off',
-              '│ ▸ .adbanner / .fwdboost (metadata palsu tidak didukung)',
-              '└─────────────',
-              '',
-              '╭─── ✦ 𝐒𝐲𝐬𝐭𝐞𝐦 ───',
-              `├ NODE     : ${process.version}`,
-              `├ RAM      : ${memMb} MB`,
-              '├ STATUS   : ONLINE',
-              '╰── _ᴘᴏᴡᴇʀᴇᴅ ʙʏ ochild bot ai_'
+              'Pilih kategori menu untuk melihat perintah yang tersedia.'
             ].join('\n');
-            await sendReply(menuText);
+
+            await sock.sendMessage(chatId, {
+              title: '📋 Buka Menu',
+              text: menuHeader,
+              footer: 'Powered by Ochild Bot AI + Rolleys',
+              buttonText: 'Pilih',
+              sections: [{
+                title: 'Pilih Kategori Menu',
+                rows: [
+                  { title: '🧠 KECERDASAN BUATAN', description: 'AI Groq & Grok, coding, translate, ringkasan', rowId: 'ocmenu_ai' },
+                  { title: '📥 DOWNLOADER', description: 'Unduh URL dan preview ZIP', rowId: 'ocmenu_download' },
+                  { title: '🎨 MEDIA & STIKER', description: 'Sticker, Brat, AI sticker, konversi media', rowId: 'ocmenu_media' },
+                  { title: '👥 MANAJEMEN GRUP', description: 'Admin grup, tag, anti-link, welcome, AFK', rowId: 'ocmenu_group' },
+                  { title: '🎮 GAMES & FUN', description: 'Fitur hiburan yang tersedia pada bot', rowId: 'ocmenu_fun' },
+                  { title: '🛠️ ALAT & UTILITAS', description: 'Catatan, QR, TTS, cuaca, polling, tabel', rowId: 'ocmenu_tools' },
+                  { title: '⚙️ KONTROL BOT', description: 'Mode, AI otomatis, keamanan, konfigurasi', rowId: 'ocmenu_control' }
+                ]
+              }]
+            }, { quoted: m });
             break;
           }
 

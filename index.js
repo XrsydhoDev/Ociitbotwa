@@ -13,42 +13,67 @@ const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
-// Resolve FFmpeg from Railway/Nixpacks PATH, an explicit environment path,
-// or the optional ffmpeg-static npm package.
+// Resolve FFmpeg from Nixpacks PATH, an explicit path, or ffmpeg-static.
 function resolveFfmpegPath() {
-  const candidates = [process.env.FFMPEG_PATH];
-  try { candidates.push(require('ffmpeg-static')); } catch (_) {}
+  const candidates = [];
+  if (process.env.FFMPEG_PATH) candidates.push(process.env.FFMPEG_PATH);
+  try {
+    const bundled = require('ffmpeg-static');
+    if (bundled) candidates.push(bundled);
+  } catch (_) {}
   for (const candidate of candidates) {
-    if (candidate && typeof candidate === 'string' && fs.existsSync(candidate)) return candidate;
+    if (typeof candidate === 'string' && candidate && fs.existsSync(candidate)) return candidate;
   }
-  return 'ffmpeg'; // resolved through PATH by the shell
+  return 'ffmpeg'; // Nixpacks system package, resolved through PATH.
 }
 const FFMPEG_BIN = resolveFfmpegPath();
 
 function shellQuote(value) { return "'" + String(value).replace(/'/g, "'\\''") + "'"; }
 
+// Use execFile (argument array) so spaces, quotes and special characters in
+// sticker text or temporary paths cannot corrupt the FFmpeg shell command.
 async function runFfmpeg(args, options = {}) {
-  const command = `${shellQuote(FFMPEG_BIN)} ${args.map(shellQuote).join(' ')}`;
   try {
-    return await execAsync(command, { maxBuffer: 16 * 1024 * 1024, ...options });
+    return await new Promise((resolve, reject) => {
+      execFile(FFMPEG_BIN, args.map(String), {
+        maxBuffer: 16 * 1024 * 1024,
+        ...options
+      }, (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+        } else resolve({ stdout, stderr });
+      });
+    });
   } catch (error) {
     const detail = String(error.stderr || error.message || '').trim();
-    if (/ffmpeg: not found|not recognized as an internal|enoent/i.test(detail)) {
-      throw new Error('FFmpeg tidak ditemukan. Pastikan Railway memakai Nixpacks, file nixpacks.toml berada di root repository, lalu lakukan Redeploy. Alternatif: tambahkan dependency ffmpeg-static dan set FFMPEG_PATH jika diperlukan.');
+    if (error.code === 'ENOENT' || /ffmpeg: not found|not recognized as an internal/i.test(detail)) {
+      throw new Error('FFmpeg tidak ditemukan pada server. Pastikan Railway memakai Nixpacks, nixpacks.toml berada di root repository, dan lakukan Redeploy dengan Clear Build Cache.');
+    }
+    if (/No such filter: ['"]?drawtext|Filter not found/i.test(detail)) {
+      throw new Error('FFmpeg terpasang tetapi filter drawtext tidak tersedia. Gunakan paket FFmpeg Nix dengan dukungan freetype/fontconfig.');
     }
     throw new Error(`FFmpeg gagal: ${detail.slice(0, 900) || error.message}`);
   }
 }
 
 function checkFfmpegOnStartup() {
-  exec(`${shellQuote(FFMPEG_BIN)} -version`, (error, stdout) => {
-    if (error) console.error('[FFMPEG] Tidak tersedia:', 'Pastikan nixpacks.toml aktif dan Railway sudah Redeploy.');
-    else console.log('[FFMPEG] Siap:', String(stdout).split('\n')[0]);
+  execFile(FFMPEG_BIN, ['-version'], (error, stdout) => {
+    if (error) {
+      console.error('[FFMPEG] Tidak tersedia:', error.code === 'ENOENT' ? 'binary tidak ditemukan; periksa Nixpacks/Railway builder.' : error.message);
+      return;
+    }
+    console.log('[FFMPEG] Siap:', String(stdout).split('\n')[0]);
+    execFile(FFMPEG_BIN, ['-hide_banner', '-filters'], (filterError, filterOut, filterErr) => {
+      if (filterError) console.warn('[FFMPEG] Tidak dapat memeriksa filter:', filterErr || filterError.message);
+      else console.log('[FFMPEG] drawtext:', /\bdrawtext\b/.test(filterOut) ? 'tersedia' : 'TIDAK tersedia');
+    });
   });
 }
 
@@ -1407,7 +1432,9 @@ async function startBot() {
             const textPath = path.join(TEMP_DIR, `brat_${id}.txt`);
             fs.writeFileSync(textPath, formattedText, 'utf8');
             try {
-              await runFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=white:s=512x512:d=1', '-vf', `drawtext=textfile=${textPath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")}:fontcolor=black:fontsize=46:x=(w-text_w)/2:y=(h-text_h)/2`, '-vcodec', 'libwebp', '-lossless', '1', outWebp]);
+              const safeTextPath = textPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+              const drawFilter = `drawtext=font='DejaVu Sans':textfile='${safeTextPath}':fontcolor=black:fontsize=46:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2`; 
+              await runFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=white:s=512x512:d=1', '-vf', drawFilter, '-frames:v', '1', '-vcodec', 'libwebp', '-lossless', '1', outWebp]);
               const webpWithExif = addExifToWebp(fs.readFileSync(outWebp), 'Brat Sticker', db.ownerName);
               await sock.sendMessage(chatId, { sticker: webpWithExif }, { quoted: m });
             } finally {

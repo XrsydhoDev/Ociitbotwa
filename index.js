@@ -107,6 +107,7 @@ let db = {
   autoDelSeconds: 0,
   currency: 'IDR',
   defaultChannel: 'ochild bot ai Channel',
+  channelJid: '',
   anticall: false,
   antidelete: false,
   autostory: false,
@@ -1151,23 +1152,23 @@ async function startBot() {
               '└─────────────',
               '',
               '┌── ✦ Media, Stiker & Saluran (Rolleys)',
-              '│ ▸ .sticker / .s / .sprem / .toimg',
+              '│ ▸ .sticker / .s / .sprem (stiker biasa) / .toimg',
               '│ ▸ .swm <pack>|<author> / .take',
               '│ ▸ .sai <prompt> (stiker AI)',
               '│ ▸ .rvo / .vv / .1x (buka sekali lihat)',
               '│ ▸ .dl <url> / .pvmu (preview ZIP)',
-              '│ ▸ .imgch / .stickch / .sch / .setch',
+              '│ ▸ .setch <channel_jid> / .imgch / .stickch (WhatsApp Channel)',
               '│ ▸ .brat <teks>',
               '└─────────────',
               '',
               '┌── ✦ Rich Builders & Interaktif (Rolleys)',
               '│ ▸ .poll judul|opsi1|opsi2',
-              '│ ▸ .quiz pertanyaan|opsi1|opsi2',
+              '│ ▸ .quiz pertanyaan|opsi1|opsi2 (poll, tanpa skor otomatis)',
               '│ ▸ .event judul|deskripsi|lokasi',
               '│ ▸ .table judul|col1,col2|val1,val2',
               '│ ▸ .button judul|opsi1|opsi2 (Poll interaktif)',
               '│ ▸ .listmenu judul|opsi1|opsi2 (Poll pilihan)',
-              '│ ▸ .carousel / .html / .comment',
+              '│ ▸ .carousel (kartu teks) / .html (HTML→teks) / .comment',
               '└─────────────',
               '',
               '┌── ✦ Manajemen Grup & Status (Rolleys)',
@@ -1191,8 +1192,8 @@ async function startBot() {
               '┌── ✦ Kontrol Bot & Lencana Pesan',
               '│ ▸ .self / .public / .ghostmode',
               '│ ▸ .anticall / .antidelete / .autostory',
-              '│ ▸ .fwdboost on/off / .aitag on/off',
-              '│ ▸ .adbanner / .fwdboost (metadata spoof disabled)',
+              '│ ▸ .aitag on/off',
+              '│ ▸ .adbanner / .fwdboost (metadata palsu tidak didukung)',
               '└─────────────',
               '',
               '╭─── ✦ 𝐒𝐲𝐬𝐭𝐞𝐦 ───',
@@ -1481,38 +1482,39 @@ async function startBot() {
           }
 
           case 'setch': {
-            if (!arg) return sendReply(`Nama saluran saat ini: *${db.defaultChannel}*`);
-            db.defaultChannel = arg;
+            if (!isOwner) return sendReply('Khusus Owner!');
+            if (!arg) return sendReply(`Channel JID saat ini: *${db.channelJid || 'Belum diatur'}*\nAtur dengan: .setch 120363xxxxxxxxxx@newsletter`);
+            const channelJid = arg.trim();
+            if (!/^[0-9]{8,30}@newsletter$/.test(channelJid)) {
+              return sendReply('Format Channel JID tidak valid. Gunakan JID WhatsApp Channel yang berakhiran @newsletter, bukan nama channel atau tautan undangan.');
+            }
+            db.channelJid = channelJid;
             saveDb();
-            await sendReply(`✅ Nama saluran diatur ke: *${db.defaultChannel}*`);
+            await sendReply(`✅ Tujuan WhatsApp Channel disimpan: *${channelJid}*`);
             break;
           }
 
           case 'imgch': {
+            if (!isOwner) return sendReply('Khusus Owner!');
+            if (!db.channelJid) return sendReply('Atur tujuan channel terlebih dahulu dengan .setch <channel_jid>');
             const target = getTargetMediaMessage();
-            if (!target?.message?.imageMessage) return sendReply('Kirim/balas gambar dengan .imgch Nama Saluran | Caption');
-            const parts = arg.split('|');
-            const chName = parts[0] ? parts[0].trim() : db.defaultChannel;
-            const cap = parts[1] ? parts[1].trim() : '';
+            if (!target?.message?.imageMessage) return sendReply('Balas/kirim gambar dengan .imgch <caption> untuk menerbitkan ke channel.');
             const buf = await downloadMediaMessage(target, 'buffer', {});
-            await sock.sendMessage(chatId, {
-              image: buf,
-              caption: cap ? `[${chName}]\n${cap}` : `[${chName}]`,
-              contextInfo: undefined
-            }, { quoted: m });
+            await sock.sendMessage(db.channelJid, { image: buf, caption: arg || '' });
+            await sendReply('✅ Gambar dikirim ke WhatsApp Channel.');
             break;
           }
 
           case 'stickch':
           case 'sch': {
+            if (!isOwner) return sendReply('Khusus Owner!');
+            if (!db.channelJid) return sendReply('Atur tujuan channel terlebih dahulu dengan .setch <channel_jid>');
             const target = getTargetMediaMessage();
-            if (!target || !(target.message.imageMessage || target.message.videoMessage || target.message.stickerMessage)) return sendReply('Kirim/balas gambar, video, atau stiker dengan .sch Nama Saluran');
-            const chName = arg || db.defaultChannel;
+            if (!target || !(target.message.imageMessage || target.message.videoMessage || target.message.stickerMessage)) return sendReply('Balas gambar, video, atau stiker dengan .sch untuk menerbitkan stiker ke channel.');
             const buf = await downloadMediaMessage(target, 'buffer', {});
-            const webp = target.message.stickerMessage ? buf : await createWebpSticker(buf, Boolean(target.message.videoMessage), chName, db.ownerName);
-            await sock.sendMessage(chatId, {
-              sticker: webp
-            }, { quoted: m });
+            const webp = target.message.stickerMessage ? buf : await createWebpSticker(buf, Boolean(target.message.videoMessage), 'Ochild Channel', db.ownerName);
+            await sock.sendMessage(db.channelJid, { sticker: webp });
+            await sendReply('✅ Stiker dikirim ke WhatsApp Channel.');
             break;
           }
 
@@ -1579,18 +1581,41 @@ async function startBot() {
           }
 
           case 'html': {
-            if (!arg) return sendReply('Gunakan: .html <b>Teks HTML</b>');
-            await sendReply('🌐 *HTML Preview:*\n' + arg.replace(/<[^>]*>?/gm, ''));
+            if (!arg) return sendReply('Gunakan: .html <b>Teks</b> — tag HTML diubah menjadi teks WhatsApp, bukan dirender sebagai halaman web.');
+            const htmlText = arg
+              .replace(/<(br|hr)\s*\/?\s*>/gi, '\n')
+              .replace(/<\/(p|div|li|h[1-6])\s*>/gi, '\n')
+              .replace(/<li\b[^>]*>/gi, '• ')
+              .replace(/<[^>]*>/g, '')
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&lt;/gi, '<')
+              .replace(/&gt;/gi, '>')
+              .replace(/&quot;/gi, '"')
+              .replace(/&#39;|&apos;/gi, "'")
+              .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Math.min(0x10FFFF, Number(n))))
+              .replace(/\n[ \t]+/g, '\n')
+              .replace(/\n{3,}/g, '\n\n')
+              .trim();
+            await sendReply('🌐 *HTML → Teks WhatsApp:*\n' + htmlText);
             break;
           }
 
           case 'comment': {
             if (!arg) return sendReply('Gunakan: .comment <isi komentar> (balas pesan yang ingin dikomentari)');
             if (!quotedMsg) return sendReply('Balas pesan target terlebih dahulu, lalu ketik .comment <komentar>.');
-            const qctx=actualMsg.extendedTextMessage?.contextInfo||{};
-            const original=deletedMessagesCache[qctx.stanzaId];
-            if(original) await sock.sendMessage(chatId,{text:`💬 ${arg}`},{quoted:original});
-            else await sendReply(`💬 ${arg}`);
+            const qctx = actualMsg.extendedTextMessage?.contextInfo || {};
+            const original = deletedMessagesCache[qctx.stanzaId] || (qctx.stanzaId ? {
+              key: {
+                remoteJid: chatId,
+                id: qctx.stanzaId,
+                ...(qctx.participant ? { participant: qctx.participant } : {}),
+                fromMe: Boolean(qctx.fromMe)
+              },
+              message: quotedMsg
+            } : null);
+            if (!original?.message) return sendReply('Pesan asli tidak dapat dikutip. Balas pesan yang masih tersedia lalu coba lagi.');
+            await sock.sendMessage(chatId, { text: `💬 ${arg}` }, { quoted: original });
             break;
           }
 
@@ -1937,14 +1962,14 @@ async function startBot() {
             if (!isOwner) return sendReply('Khusus Owner!');
             db.adbanner = false;
             saveDb();
-            await sendReply('ℹ️ Ad-banner metadata dinonaktifkan karena bot tidak memiliki iklan terverifikasi.');
+            await sendReply('ℹ️ Metadata iklan tidak tersedia melalui Baileys. Tidak ada perubahan yang dilakukan.');
             break;
           }
           case 'fwdboost': {
             if (!isOwner) return sendReply('Khusus Owner!');
             db.fwdboost = false;
             saveDb();
-            await sendReply('ℹ️ Forward badge palsu dinonaktifkan. Gunakan .fwd untuk meneruskan pesan asli.');
+            await sendReply('ℹ️ Badge forward palsu tidak didukung. Gunakan .fwd untuk meneruskan pesan asli.');
             break;
           }
           case 'ghostmode': {

@@ -1,8 +1,10 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "ffmpeg", "fontconfig", "dejavu_fonts"]
-
-[phases.install]
-cmds = ["npm install"]
-
-[start]
-cmd = "npm start"
+nixPkgs = [
+  "...",
+  "nodejs_20",
+  "ffmpeg",
+  "fontconfig",
+  "dejavu_fonts",
+  "unzip",
+  "yt-dlp"
+]

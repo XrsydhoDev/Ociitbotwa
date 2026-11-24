@@ -1,11 +1,13 @@
 {
-  "$schema": "https://schema.railpack.com",
+  "$schema": "https://railpack.com",
   "packages": {
     "node": "20"
   },
   "deploy": {
     "aptPackages": [
-      "...",
+      "python3",
+      "make",
+      "g++",
       "ffmpeg",
       "fontconfig",
       "fonts-dejavu-core",

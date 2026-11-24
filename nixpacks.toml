@@ -1,7 +1,9 @@
 [phases.setup]
 nixPkgs = [
-  "...",
   "nodejs_20",
+  "python3",
+  "gcc",
+  "gnumake",
   "ffmpeg",
   "fontconfig",
   "dejavu_fonts",

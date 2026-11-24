@@ -10,6 +10,7 @@
   "dependencies": {
     "@whiskeysockets/baileys": "npm:@itsliaaa/baileys@latest",
     "axios": "^1.7.9",
+    "better-sqlite3": "^11.8.1",
     "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0"
   },

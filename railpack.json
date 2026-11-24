@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": {
+    "node": "20"
+  },
+  "deploy": {
+    "aptPackages": [
+      "...",
+      "ffmpeg",
+      "fontconfig",
+      "fonts-dejavu-core"
+    ]
+  }
+}

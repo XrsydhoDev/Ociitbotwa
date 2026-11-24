@@ -54,7 +54,7 @@ async function runFfmpeg(args, options = {}) {
   } catch (error) {
     const detail = String(error.stderr || error.message || '').trim();
     if (error.code === 'ENOENT' || /ffmpeg: not found|not recognized as an internal/i.test(detail)) {
-      throw new Error('FFmpeg tidak ditemukan pada server. Pastikan Railway memakai Nixpacks, nixpacks.toml berada di root repository, dan lakukan Redeploy dengan Clear Build Cache.');
+      throw new Error('FFmpeg tidak ditemukan pada server. Pastikan paket ffmpeg dipasang pada builder Railway (Railpack: railpack.json / Nixpacks: nixpacks.toml), lalu lakukan redeploy.');
     }
     if (/No such filter: ['"]?drawtext|Filter not found/i.test(detail)) {
       throw new Error('FFmpeg terpasang tetapi filter drawtext tidak tersedia. Gunakan paket FFmpeg Nix dengan dukungan freetype/fontconfig.');
@@ -66,7 +66,7 @@ async function runFfmpeg(args, options = {}) {
 function checkFfmpegOnStartup() {
   execFile(FFMPEG_BIN, ['-version'], (error, stdout) => {
     if (error) {
-      console.error('[FFMPEG] Tidak tersedia:', error.code === 'ENOENT' ? 'binary tidak ditemukan; periksa Nixpacks/Railway builder.' : error.message);
+      console.error('[FFMPEG] Tidak tersedia:', error.code === 'ENOENT' ? 'binary tidak ditemukan; periksa railpack.json atau nixpacks.toml sesuai builder Railway.' : error.message);
       return;
     }
     console.log('[FFMPEG] Siap:', String(stdout).split('\n')[0]);

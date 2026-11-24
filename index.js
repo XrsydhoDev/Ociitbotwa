@@ -980,6 +980,36 @@ async function startBot() {
           }
           return lastSent;
         };
+        // Deteksi otomatis saat mengirim video tanpa caption/perintah
+        if (!trimmed && !m.key.fromMe && actualMsg.videoMessage) {
+          const vid = actualMsg.videoMessage;
+          const width = vid.width || '-';
+          const height = vid.height || '-';
+          const orientation = (vid.height && vid.width)
+            ? (vid.height >= vid.width ? 'Portrait' : 'Landscape')
+            : '';
+          const duration = vid.seconds ? `${vid.seconds}s` : '-';
+          const fileSizeMb = vid.fileLength
+            ? `${(Number(vid.fileLength) / (1024 * 1024)).toFixed(1)} MB`
+            : '-';
+
+          const infoText = [
+            '🎬 *VIDEO DITERIMA*',
+            '',
+            `• *Resolusi:* ${width}x${height}${orientation ? ` (${orientation})` : ''}`,
+            `• *Durasi:* ${duration}`,
+            `• *Ukuran:* ${fileSizeMb}`,
+            '',
+            'Balas pesan video ini dengan salah satu perintah berikut:',
+            `• *${db.prefix}hd* — Jadikan Status HD 60 FPS`,
+            `• *${db.prefix}kompres* — Kompres Ukuran Video`,
+            `• *${db.prefix}fps 60* — Haluskan Gerakan 60 FPS`,
+            `• *${db.prefix}mp3* — Ambil Audio MP3 dari Video`
+          ].join('\n');
+
+          await sendReply(infoText);
+          continue;
+        }
 
         // Rolleys declarative plugins (incoming triggers, auto-replies and actions).
         if (trimmed && !trimmed.toLowerCase().startsWith(`${db.prefix}plugin`)) {
@@ -1136,6 +1166,92 @@ async function startBot() {
         }
 
         switch (cmd) {
+                    case 'hd':
+          case 'kompres':
+          case 'fps':
+          case 'mp3': {
+            const target = getTargetMediaMessage();
+            if (!target?.message?.videoMessage) {
+              return sendReply(`Kirim atau balas video dengan perintah *.${cmd}*${cmd === 'fps' ? ' 60' : ''}`);
+            }
+
+            if (cmd === 'fps' && arg !== '60') {
+              return sendReply('Gunakan: *.fps 60* (balas video yang ingin dihaluskan ke 60 FPS)');
+            }
+
+            await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
+
+            const id = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const inPath = path.join(TEMP_DIR, `vid_in_${id}.mp4`);
+            const outExt = cmd === 'mp3' ? 'mp3' : 'mp4';
+            const outPath = path.join(TEMP_DIR, `vid_out_${id}.${outExt}`);
+
+            try {
+              const videoBuf = await downloadMediaMessage(target, 'buffer', {});
+              fs.writeFileSync(inPath, videoBuf);
+
+              await sock.sendMessage(chatId, { react: { text: '⚙️', key: m.key } });
+
+              if (cmd === 'hd') {
+                await runFfmpeg([
+                  '-y', '-i', inPath,
+                  '-vf', 'unsharp=5:5:0.8:3:3:0.4',
+                  '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+                  '-r', '60', '-pix_fmt', 'yuv420p',
+                  '-c:a', 'aac', '-b:a', '192k',
+                  '-movflags', '+faststart', outPath
+                ]);
+              } else if (cmd === 'kompres') {
+                await runFfmpeg([
+                  '-y', '-i', inPath,
+                  '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+                  '-c:a', 'aac', '-b:a', '128k',
+                  '-movflags', '+faststart', outPath
+                ]);
+              } else if (cmd === 'fps') {
+                await runFfmpeg([
+                  '-y', '-i', inPath,
+                  '-filter:v', 'minterpolate=fps=60:mi_mode=blend',
+                  '-c:v', 'libx264', '-preset', 'fast', '-crf', '20',
+                  '-c:a', 'copy', outPath
+                ]);
+              } else if (cmd === 'mp3') {
+                await runFfmpeg([
+                  '-y', '-i', inPath,
+                  '-vn', '-acodec', 'libmp3lame', '-b:a', '192k',
+                  outPath
+                ]);
+              }
+
+              const outBuf = fs.readFileSync(outPath);
+
+              if (cmd === 'mp3') {
+                await sock.sendMessage(chatId, {
+                  audio: outBuf,
+                  mimetype: 'audio/mpeg',
+                  fileName: `Audio_${id}.mp3`
+                }, { quoted: m });
+              } else {
+                const label = cmd === 'hd' ? 'HD_60fps' : cmd === 'fps' ? '60fps' : 'Kompres';
+                await sock.sendMessage(chatId, {
+                  document: outBuf,
+                  mimetype: 'video/mp4',
+                  fileName: `Status_${label}_${id}.mp4`,
+                  caption: `✅ *Video ${label.replace('_', ' ')} selesai!*\nUpload file dokumen ini ke Status WA agar tidak dikompresi.`
+                }, { quoted: m });
+              }
+
+              await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } });
+            } catch (e) {
+              await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } });
+              throw e;
+            } finally {
+              if (fs.existsSync(inPath)) fs.unlinkSync(inPath);
+              if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
+            }
+            break;
+          }
+
           case 'plugin': {
             if (!isOwner) return sendReply('❌ Perintah plugin hanya untuk owner.');
             const sub = (arg.split(/\s+/)[0] || 'list').toLowerCase();
